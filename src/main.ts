@@ -29,17 +29,23 @@ app.use(helmet({
 
 const corsOrigin = process.env.CORS_ORIGIN
     ? process.env.CORS_ORIGIN.split(',')
-    : ['http://localhost:3000', 'http://127.0.0.1:3000'];
+    : [
+        'http://localhost:3000',
+        'http://127.0.0.1:3000',
+        'https://cle-du-memoire-front.vercel.app'
+    ];
 
 app.use(cors({
     origin: (origin, callback) => {
-        if (!origin || corsOrigin.indexOf(origin) !== -1 || process.env.NODE_ENV !== 'production') {
+        if (!origin || corsOrigin.includes(origin) || process.env.NODE_ENV !== 'production') {
             callback(null, true);
         } else {
+            console.warn(`CORS blocked for origin: ${origin}`);
             callback(new Error('Not allowed by CORS'));
         }
     },
     credentials: true,
+    optionsSuccessStatus: 200
 }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
