@@ -30,7 +30,9 @@ app.use(helmet({
 const allowedOrigins = [
     'http://localhost:3000',
     'http://127.0.0.1:3000',
-    'https://cle-du-memoire-front.vercel.app'
+    'https://cle-du-memoire-front.vercel.app',
+    'https://cledumemoire.com',
+    'https://www.cledumemoire.com'
 ];
 
 app.use(cors({

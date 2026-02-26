@@ -10,7 +10,7 @@
                 },
                 {
                     "key": "Access-Control-Allow-Origin",
-                    "value": "https://cle-du-memoire-front.vercel.app"
+                    "value": "https://www.cledumemoire.com"
                 },
                 {
                     "key": "Access-Control-Allow-Methods",
