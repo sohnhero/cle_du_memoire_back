@@ -42,7 +42,7 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
                 where: { accompagnateurId: user.id },
                 include: {
                     student: {
-                        select: { id: true, firstName: true, lastName: true, field: true, university: true }
+                        select: { id: true, firstName: true, lastName: true, field: true, university: true, avatar: true }
                     }
                 }
             });
@@ -88,7 +88,12 @@ router.patch('/:id', authenticate, async (req: AuthRequest, res: Response) => {
                 ...(title && { title }),
                 ...(phase && { phase }),
                 ...(progressPercent !== undefined && { progressPercent }),
-                ...(notes && { notes }),
+                ...(notes !== undefined && { notes }),
+            },
+            include: {
+                student: {
+                    select: { id: true, firstName: true, lastName: true, field: true, university: true, avatar: true }
+                }
             }
         });
 
