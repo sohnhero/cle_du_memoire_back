@@ -9,9 +9,9 @@ const router = Router();
 // Register
 router.post('/register', async (req, res: Response) => {
     try {
-        const { email, password, firstName, lastName, phone, role, university, field, packId } = req.body;
+        const { email, password, firstName, lastName, phone, role, university, field, studyLevel, targetDefenseDate, packId } = req.body;
 
-        if (!email || !password || !firstName || !lastName) {
+        if (!email || !password || !firstName || !lastName || !studyLevel || !targetDefenseDate) {
             return res.status(400).json({ error: 'Champs obligatoires manquants' });
         }
 
@@ -33,6 +33,8 @@ router.post('/register', async (req, res: Response) => {
                 role: validRole,
                 university: university || null,
                 field: field || null,
+                studyLevel: studyLevel || null,
+                targetDefenseDate: targetDefenseDate ? new Date(targetDefenseDate) : null,
                 // Create student memoire progress entry automatically
                 ...(validRole === 'STUDENT' ? {
                     memoiresAsStudent: {

@@ -11,6 +11,7 @@ router.get('/', authenticate, authorize('ADMIN'), async (_req: AuthRequest, res:
             select: {
                 id: true, email: true, firstName: true, lastName: true,
                 phone: true, role: true, university: true, field: true,
+                studyLevel: true, targetDefenseDate: true,
                 isActive: true, createdAt: true, updatedAt: true,
                 memoiresAsStudent: {
                     select: {
@@ -38,6 +39,7 @@ router.get('/me', authenticate, async (req: AuthRequest, res: Response) => {
             select: {
                 id: true, email: true, firstName: true, lastName: true,
                 phone: true, role: true, university: true, field: true,
+                studyLevel: true, targetDefenseDate: true,
                 avatar: true, isActive: true, createdAt: true,
             },
         });
@@ -51,13 +53,14 @@ router.get('/me', authenticate, async (req: AuthRequest, res: Response) => {
 router.patch('/:id', authenticate, authorize('ADMIN'), async (req, res: Response) => {
     try {
         const { id } = req.params;
-        const { firstName, lastName, phone, role, university, field, isActive } = req.body;
+        const { firstName, lastName, phone, role, university, field, studyLevel, targetDefenseDate, isActive } = req.body;
         const user = await prisma.user.update({
             where: { id },
-            data: { firstName, lastName, phone, role, university, field, isActive },
+            data: { firstName, lastName, phone, role, university, field, studyLevel, targetDefenseDate: targetDefenseDate ? new Date(targetDefenseDate) : null, isActive },
             select: {
                 id: true, email: true, firstName: true, lastName: true,
                 phone: true, role: true, university: true, field: true,
+                studyLevel: true, targetDefenseDate: true,
                 isActive: true, createdAt: true, updatedAt: true,
             },
         });
@@ -114,13 +117,16 @@ router.post('/:id/assign-coach', authenticate, authorize('ADMIN'), async (req: A
 // Update own profile
 router.patch('/me/profile', authenticate, async (req: AuthRequest, res: Response) => {
     try {
-        const { firstName, lastName, phone, university, field } = req.body;
+        import('fs').then(fs => fs.appendFileSync('/tmp/cdm_profile.log', JSON.stringify({ body: req.body, user: req.user!.id }) + '\\n')).catch(() => { });
+        const { firstName, lastName, phone, university, field, studyLevel, targetDefenseDate } = req.body;
+
         const user = await prisma.user.update({
             where: { id: req.user!.id },
-            data: { firstName, lastName, phone, university, field },
+            data: { firstName, lastName, phone, university, field, studyLevel, targetDefenseDate: targetDefenseDate ? new Date(targetDefenseDate) : null },
             select: {
                 id: true, email: true, firstName: true, lastName: true,
                 phone: true, role: true, university: true, field: true,
+                studyLevel: true, targetDefenseDate: true,
                 avatar: true, createdAt: true,
             },
         });
@@ -144,6 +150,7 @@ router.patch('/me/avatar', authenticate, async (req: AuthRequest, res: Response)
             select: {
                 id: true, email: true, firstName: true, lastName: true,
                 phone: true, role: true, university: true, field: true,
+                studyLevel: true, targetDefenseDate: true,
                 avatar: true, createdAt: true,
             },
         });
