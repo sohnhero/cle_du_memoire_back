@@ -4,15 +4,48 @@ import { authenticate, AuthRequest } from '../common/guards/auth.guard';
 
 const router = Router();
 
-// Get calendar events
+// Get calendar events (own events + meetings assigned to student)
 router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
     try {
-        const events = await prisma.event.findMany({
-            where: { userId: req.user!.id },
+        const userId = req.user!.id;
+
+        // Personal events (created by user)
+        const ownEvents = await prisma.event.findMany({
+            where: { userId },
+            include: {
+                student: { select: { id: true, firstName: true, lastName: true, avatar: true } },
+            },
             orderBy: { date: 'asc' },
         });
+
+        // For students: also get meetings where they are the student
+        let assignedMeetings: any[] = [];
+        if (req.user!.role === 'STUDENT') {
+            assignedMeetings = await prisma.event.findMany({
+                where: {
+                    studentId: userId,
+                    userId: { not: userId }, // not their own event
+                },
+                include: {
+                    user: { select: { id: true, firstName: true, lastName: true, avatar: true } },
+                },
+                orderBy: { date: 'asc' },
+            });
+            // Tag assigned meetings so frontend knows they came from coach
+            assignedMeetings = assignedMeetings.map(m => ({
+                ...m,
+                isFromCoach: true,
+                coachName: `${m.user.firstName} ${m.user.lastName}`,
+            }));
+        }
+
+        const events = [...ownEvents, ...assignedMeetings].sort(
+            (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+        );
+
         res.json({ events });
-    } catch {
+    } catch (err) {
+        console.error(err);
         res.status(500).json({ error: 'Erreur serveur' });
     }
 });
@@ -20,24 +53,85 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
 // Get next upcoming event
 router.get('/next', authenticate, async (req: AuthRequest, res: Response) => {
     try {
-        const nextEvent = await prisma.event.findFirst({
+        const userId = req.user!.id;
+
+        // Check own events
+        const ownNext = await prisma.event.findFirst({
             where: {
-                userId: req.user!.id,
+                userId,
                 isCompleted: false,
                 date: { gte: new Date() }
             },
             orderBy: { date: 'asc' },
         });
+
+        // For students, also check assigned meetings
+        let assignedNext = null;
+        if (req.user!.role === 'STUDENT') {
+            assignedNext = await prisma.event.findFirst({
+                where: {
+                    studentId: userId,
+                    userId: { not: userId },
+                    isCompleted: false,
+                    date: { gte: new Date() }
+                },
+                include: {
+                    user: { select: { firstName: true, lastName: true } },
+                },
+                orderBy: { date: 'asc' },
+            });
+        }
+
+        // Return whichever is sooner
+        let nextEvent = ownNext;
+        if (assignedNext && (!ownNext || new Date(assignedNext.date) < new Date(ownNext.date))) {
+            nextEvent = { ...assignedNext, isFromCoach: true, coachName: `${assignedNext.user.firstName} ${assignedNext.user.lastName}` } as any;
+        }
+
         res.json({ event: nextEvent });
     } catch {
         res.status(500).json({ error: 'Erreur serveur' });
     }
 });
 
-// Create event
+// Get coach's assigned students
+router.get('/students', authenticate, async (req: AuthRequest, res: Response) => {
+    try {
+        if (req.user!.role !== 'ACCOMPAGNATEUR' && req.user!.role !== 'ADMIN') {
+            return res.status(403).json({ error: 'Accès non autorisé' });
+        }
+
+        const memoires = await prisma.memoireProgress.findMany({
+            where: { accompagnateurId: req.user!.id },
+            include: {
+                student: {
+                    select: { id: true, firstName: true, lastName: true, avatar: true, email: true },
+                },
+            },
+        });
+
+        const students = memoires
+            .map(m => m.student)
+            .filter((s, i, arr) => arr.findIndex(x => x.id === s.id) === i); // deduplicate
+
+        res.json({ students });
+    } catch {
+        res.status(500).json({ error: 'Erreur serveur' });
+    }
+});
+
+// Create event (with optional meeting scheduling)
 router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
     try {
-        const { title, description, date, type } = req.body;
+        const { title, description, date, type, studentId } = req.body;
+
+        // Auto-generate Jitsi meeting link for MEETING type
+        let meetingLink: string | null = null;
+        if (type === 'MEETING') {
+            const roomId = `cle-du-memoire-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+            meetingLink = `https://meet.jit.si/${roomId}`;
+        }
+
         const newEvent = await prisma.event.create({
             data: {
                 userId: req.user!.id,
@@ -45,10 +139,37 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
                 description,
                 date: new Date(date),
                 type: type || 'REMINDER',
-            }
+                studentId: type === 'MEETING' ? studentId : null,
+                meetingLink,
+            },
+            include: {
+                student: { select: { id: true, firstName: true, lastName: true, avatar: true } },
+            },
         });
+
+        // Auto-create notification for the student if it's a meeting
+        if (type === 'MEETING' && studentId) {
+            const meetingDate = new Date(date);
+            const formattedDate = meetingDate.toLocaleDateString('fr-FR', {
+                weekday: 'long', day: 'numeric', month: 'long',
+            });
+            const formattedTime = meetingDate.toLocaleTimeString('fr-FR', {
+                hour: '2-digit', minute: '2-digit',
+            });
+
+            await prisma.notification.create({
+                data: {
+                    userId: studentId,
+                    title: '📅 Séance planifiée',
+                    content: `Votre accompagnateur a planifié une séance le ${formattedDate} à ${formattedTime}. ${title}`,
+                    type: 'meeting',
+                },
+            });
+        }
+
         res.status(201).json({ event: newEvent });
-    } catch {
+    } catch (err) {
+        console.error(err);
         res.status(500).json({ error: 'Erreur lors de la création' });
     }
 });
