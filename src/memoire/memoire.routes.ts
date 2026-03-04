@@ -37,16 +37,43 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
                 });
             }
         } else if (user.role === 'ACCOMPAGNATEUR') {
-            // If accompagnateur requests without specific ID, return all their students' memoires
-            const memoires = await prisma.memoireProgress.findMany({
-                where: { accompagnateurId: user.id },
-                include: {
-                    student: {
-                        select: { id: true, firstName: true, lastName: true, field: true, university: true, avatar: true }
-                    }
-                }
+            const page = parseInt(req.query.page as string) || 1;
+            const limit = parseInt(req.query.limit as string) || 20;
+            const skip = (page - 1) * limit;
+            const search = req.query.search as string;
+
+            const where: any = { accompagnateurId: user.id };
+            if (search) {
+                where.student = {
+                    OR: [
+                        { firstName: { contains: search, mode: 'insensitive' } },
+                        { lastName: { contains: search, mode: 'insensitive' } },
+                        { field: { contains: search, mode: 'insensitive' } },
+                    ]
+                };
+            }
+
+            const [memoires, total] = await Promise.all([
+                prisma.memoireProgress.findMany({
+                    where,
+                    include: {
+                        student: {
+                            select: { id: true, firstName: true, lastName: true, field: true, university: true, avatar: true }
+                        }
+                    },
+                    skip,
+                    take: limit,
+                    orderBy: { student: { lastName: 'asc' } }
+                }),
+                prisma.memoireProgress.count({ where })
+            ]);
+
+            return res.json({
+                memoires,
+                total,
+                page,
+                totalPages: Math.ceil(total / limit)
             });
-            return res.json({ memoires });
         } else {
             return res.status(403).json({ error: 'Non autorisé' });
         }

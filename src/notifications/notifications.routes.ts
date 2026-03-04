@@ -7,12 +7,32 @@ const router = Router();
 // Get my notifications
 router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
     try {
-        const notifications = await prisma.notification.findMany({
-            where: { userId: req.user!.id },
-            orderBy: { createdAt: 'desc' },
-            take: 50,
+        const page = parseInt(req.query.page as string) || 1;
+        const limit = parseInt(req.query.limit as string) || 20;
+        const skip = (page - 1) * limit;
+        const unreadOnly = req.query.unread === 'true';
+
+        const where: any = { userId: req.user!.id };
+        if (unreadOnly) {
+            where.isRead = false;
+        }
+
+        const [notifications, total] = await Promise.all([
+            prisma.notification.findMany({
+                where,
+                orderBy: { createdAt: 'desc' },
+                skip,
+                take: limit,
+            }),
+            prisma.notification.count({ where })
+        ]);
+
+        res.json({
+            notifications,
+            total,
+            page,
+            totalPages: Math.ceil(total / limit)
         });
-        res.json({ notifications });
     } catch {
         res.status(500).json({ error: 'Erreur serveur' });
     }

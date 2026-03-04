@@ -5,27 +5,56 @@ import { authenticate, authorize, AuthRequest } from '../common/guards/auth.guar
 const router = Router();
 
 // Get all users (Admin only)
-router.get('/', authenticate, authorize('ADMIN'), async (_req: AuthRequest, res: Response) => {
+router.get('/', authenticate, authorize('ADMIN'), async (req: AuthRequest, res: Response) => {
     try {
-        const users = await prisma.user.findMany({
-            select: {
-                id: true, email: true, firstName: true, lastName: true,
-                phone: true, role: true, university: true, field: true,
-                studyLevel: true, targetDefenseDate: true,
-                isActive: true, createdAt: true, updatedAt: true,
-                memoiresAsStudent: {
-                    select: {
-                        accompagnateur: {
-                            select: { id: true, firstName: true, lastName: true }
-                        }
-                    },
-                    orderBy: { createdAt: 'desc' },
-                    take: 1
-                }
-            },
-            orderBy: { createdAt: 'desc' },
+        const page = parseInt(req.query.page as string) || 1;
+        const limit = parseInt(req.query.limit as string) || 20;
+        const skip = (page - 1) * limit;
+        const { role, search } = req.query;
+
+        const where: any = {};
+        if (role && role !== 'ALL') {
+            where.role = role;
+        }
+        if (search) {
+            where.OR = [
+                { firstName: { contains: String(search), mode: 'insensitive' } },
+                { lastName: { contains: String(search), mode: 'insensitive' } },
+                { email: { contains: String(search), mode: 'insensitive' } },
+            ];
+        }
+
+        const [users, total] = await Promise.all([
+            prisma.user.findMany({
+                where,
+                skip,
+                take: limit,
+                select: {
+                    id: true, email: true, firstName: true, lastName: true,
+                    phone: true, role: true, university: true, field: true,
+                    studyLevel: true, targetDefenseDate: true,
+                    isActive: true, createdAt: true, updatedAt: true,
+                    memoiresAsStudent: {
+                        select: {
+                            accompagnateur: {
+                                select: { id: true, firstName: true, lastName: true }
+                            }
+                        },
+                        orderBy: { createdAt: 'desc' },
+                        take: 1
+                    }
+                },
+                orderBy: { createdAt: 'desc' },
+            }),
+            prisma.user.count({ where })
+        ]);
+
+        res.json({
+            users,
+            total,
+            page,
+            totalPages: Math.ceil(total / limit)
         });
-        res.json({ users });
     } catch {
         res.status(500).json({ error: 'Erreur serveur' });
     }

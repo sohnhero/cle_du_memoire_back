@@ -7,21 +7,47 @@ const router = Router();
 // Get my documents
 router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
     try {
-        const where = req.user!.role === 'ADMIN'
+        const page = parseInt(req.query.page as string) || 1;
+        const limit = parseInt(req.query.limit as string) || 20;
+        const skip = (page - 1) * limit;
+        const { search, category, status } = req.query;
+
+        const where: any = req.user!.role === 'ADMIN'
             ? {}
             : req.user!.role === 'ACCOMPAGNATEUR'
                 ? { memoire: { accompagnateurId: req.user!.id } }
                 : { uploaderId: req.user!.id };
 
-        const documents = await prisma.document.findMany({
-            where,
-            include: {
-                uploader: { select: { id: true, firstName: true, lastName: true, role: true } },
-                memoire: { select: { id: true, title: true, phase: true } },
-            },
-            orderBy: { createdAt: 'desc' },
+        if (search) {
+            where.filename = { contains: String(search), mode: 'insensitive' };
+        }
+        if (category && category !== 'ALL') {
+            where.category = category;
+        }
+        if (status && status !== 'ALL') {
+            where.status = status;
+        }
+
+        const [documents, total] = await Promise.all([
+            prisma.document.findMany({
+                where,
+                include: {
+                    uploader: { select: { id: true, firstName: true, lastName: true, role: true } },
+                    memoire: { select: { id: true, title: true, phase: true } },
+                },
+                orderBy: { createdAt: 'desc' },
+                skip,
+                take: limit,
+            }),
+            prisma.document.count({ where })
+        ]);
+
+        res.json({
+            documents,
+            total,
+            page,
+            totalPages: Math.ceil(total / limit)
         });
-        res.json({ documents });
     } catch {
         res.status(500).json({ error: 'Erreur serveur' });
     }

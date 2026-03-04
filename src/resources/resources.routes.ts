@@ -10,14 +10,36 @@ const upload = multer();
 // Get resources
 router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
     try {
-        const { category } = req.query;
-        const whereClause = category ? { category: String(category) } : {};
+        const { category, search } = req.query;
+        const page = parseInt(req.query.page as string) || 1;
+        const limit = parseInt(req.query.limit as string) || 10;
+        const skip = (page - 1) * limit;
 
-        const resources = await prisma.resource.findMany({
-            where: whereClause,
-            orderBy: { createdAt: 'desc' },
+        const whereClause: any = category && category !== 'ALL' ? { category: String(category) } : {};
+
+        if (search) {
+            whereClause.OR = [
+                { title: { contains: String(search), mode: 'insensitive' } },
+                { description: { contains: String(search), mode: 'insensitive' } },
+            ];
+        }
+
+        const [resources, total] = await Promise.all([
+            prisma.resource.findMany({
+                where: whereClause,
+                skip,
+                take: limit,
+                orderBy: { createdAt: 'desc' },
+            }),
+            prisma.resource.count({ where: whereClause })
+        ]);
+
+        res.json({
+            resources,
+            total,
+            page,
+            totalPages: Math.ceil(total / limit)
         });
-        res.json({ resources });
     } catch {
         res.status(500).json({ error: 'Erreur serveur' });
     }
