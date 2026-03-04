@@ -38,6 +38,7 @@ router.post('/register', async (req, res: Response) => {
 
         const hashedPassword = await bcrypt.hash(password, 12);
         const validRole = role === 'ACCOMPAGNATEUR' ? 'ACCOMPAGNATEUR' : 'STUDENT';
+        const isActive = validRole !== 'ACCOMPAGNATEUR'; // Coaches start inactive
 
         const user = await prisma.user.create({
             data: {
@@ -51,6 +52,7 @@ router.post('/register', async (req, res: Response) => {
                 field: field || null,
                 studyLevel: studyLevel || null,
                 targetDefenseDate: targetDefenseDate ? new Date(targetDefenseDate) : null,
+                isActive,
                 // Create student memoire progress entry automatically
                 ...(validRole === 'STUDENT' ? {
                     memoiresAsStudent: {

@@ -60,6 +60,60 @@ router.get('/', authenticate, authorize('ADMIN'), async (req: AuthRequest, res: 
     }
 });
 
+// Create user (Admin only)
+router.post('/', authenticate, authorize('ADMIN'), async (req: AuthRequest, res: Response) => {
+    try {
+        const { email, password, firstName, lastName, phone, role, university, field, studyLevel, targetDefenseDate } = req.body;
+
+        if (!email || !password || !firstName || !lastName || !role) {
+            return res.status(400).json({ error: 'Champs obligatoires manquants' });
+        }
+
+        const existingUser = await prisma.user.findUnique({ where: { email } });
+        if (existingUser) {
+            return res.status(409).json({ error: 'Cet email est déjà utilisé' });
+        }
+
+        const importBcrypt = await import('bcryptjs');
+        const hashedPassword = await importBcrypt.default.hash(password, 12);
+
+        const user = await prisma.user.create({
+            data: {
+                email,
+                password: hashedPassword,
+                firstName,
+                lastName,
+                phone: phone || null,
+                role,
+                university: university || null,
+                field: field || null,
+                studyLevel: studyLevel || null,
+                targetDefenseDate: targetDefenseDate ? new Date(targetDefenseDate) : null,
+                isActive: true, // Admin-created users are active by default
+                // Create student memoire progress entry automatically
+                ...(role === 'STUDENT' ? {
+                    memoiresAsStudent: {
+                        create: {
+                            title: `Mémoire de ${firstName} ${lastName}`,
+                        }
+                    }
+                } : {})
+            },
+            select: {
+                id: true, email: true, firstName: true, lastName: true,
+                phone: true, role: true, university: true, field: true,
+                studyLevel: true, targetDefenseDate: true,
+                isActive: true, createdAt: true
+            }
+        });
+
+        res.status(201).json({ user });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Erreur lors de la création de l\'utilisateur' });
+    }
+});
+
 // Get user profile
 router.get('/me', authenticate, async (req: AuthRequest, res: Response) => {
     try {
