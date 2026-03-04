@@ -64,6 +64,26 @@ router.post('/', authenticate, authorize('ADMIN'), upload.single('file'), async 
     }
 });
 
+// Admin ONLY: Update resource
+router.patch('/:id', authenticate, authorize('ADMIN'), async (req: AuthRequest, res: Response) => {
+    try {
+        const { title, description, category, linkUrl } = req.body;
+        const updatedResource = await prisma.resource.update({
+            where: { id: req.params.id },
+            data: {
+                title,
+                description,
+                category,
+                fileUrl: linkUrl,
+            }
+        });
+        res.json({ resource: updatedResource });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Erreur lors de la mise à jour' });
+    }
+});
+
 // Admin ONLY: Delete resource
 router.delete('/:id', authenticate, authorize('ADMIN'), async (req: AuthRequest, res: Response) => {
     try {

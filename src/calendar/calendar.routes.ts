@@ -186,6 +186,42 @@ router.delete('/:id', authenticate, async (req: AuthRequest, res: Response) => {
     }
 });
 
+// Update event details
+router.patch('/:id', authenticate, async (req: AuthRequest, res: Response) => {
+    try {
+        const { title, description, date, type, studentId } = req.body;
+
+        let meetingLink = undefined;
+        if (type === 'MEETING') {
+            const event = await prisma.event.findUnique({ where: { id: req.params.id } });
+            if (event && !event.meetingLink) {
+                const roomId = `cle-du-memoire-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+                meetingLink = `https://meet.jit.si/${roomId}`;
+            }
+        }
+
+        const updatedEvent = await prisma.event.update({
+            where: { id: req.params.id, userId: req.user!.id },
+            data: {
+                title,
+                description,
+                date: date ? new Date(date) : undefined,
+                type: type || undefined,
+                studentId: type === 'MEETING' ? studentId : null,
+                meetingLink,
+            },
+            include: {
+                student: { select: { id: true, firstName: true, lastName: true, avatar: true } },
+            },
+        });
+
+        res.json({ event: updatedEvent });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Erreur lors de la mise à jour' });
+    }
+});
+
 // Toggle completion status
 router.patch('/:id/toggle', authenticate, async (req: AuthRequest, res: Response) => {
     try {

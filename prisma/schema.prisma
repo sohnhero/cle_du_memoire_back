@@ -27,8 +27,8 @@ model User {
   conversations1    Conversation[]    @relation("Participant1")
   conversations2    Conversation[]    @relation("Participant2")
   documents         Document[]
-  events            Event[]
   meetingEvents     Event[]           @relation("StudentEvents")
+  events            Event[]
   memoiresAsCoach   MemoireProgress[] @relation("CoachMemoire")
   memoiresAsStudent MemoireProgress[] @relation("StudentMemoire")
   sentMessages      Message[]         @relation("SentMessages")
@@ -180,17 +180,17 @@ model Notification {
 model Event {
   id          String   @id @default(uuid())
   userId      String
-  studentId   String?
   title       String
   description String?
   date        DateTime
   type        String   @default("REMINDER")
-  meetingLink String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   isCompleted Boolean  @default(false)
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  meetingLink String?
+  studentId   String?
   student     User?    @relation("StudentEvents", fields: [studentId], references: [id])
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("events")
 }
