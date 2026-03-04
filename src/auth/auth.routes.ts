@@ -11,6 +11,22 @@ router.post('/register', async (req, res: Response) => {
     try {
         const { email, password, firstName, lastName, phone, role, university, field, studyLevel, targetDefenseDate, packId } = req.body;
 
+        // Registration Control Check (including Maintenance Mode)
+        const [regSetting, maintSetting] = await Promise.all([
+            prisma.globalSetting.findUnique({ where: { key: 'allowRegistrations' } }),
+            prisma.globalSetting.findUnique({ where: { key: 'maintenanceMode' } })
+        ]);
+
+        if (regSetting?.value === 'false' || maintSetting?.value === 'true') {
+            const reason = maintSetting?.value === 'true' ? 'Plateforme en maintenance' : 'Inscriptions fermées';
+            return res.status(403).json({
+                error: reason,
+                message: maintSetting?.value === 'true'
+                    ? 'Les inscriptions sont suspendues pendant la maintenance.'
+                    : 'Les inscriptions sont temporairement fermées sur la plateforme.'
+            });
+        }
+
         if (!email || !password || !firstName || !lastName || !studyLevel || !targetDefenseDate) {
             return res.status(400).json({ error: 'Champs obligatoires manquants' });
         }

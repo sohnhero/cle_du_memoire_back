@@ -220,6 +220,24 @@ router.get('/tracking', authenticate, authorize('ADMIN'), async (req: AuthReques
     }
 });
 
+// Get public config (Maintenance, Registrations, etc.)
+router.get('/config/public', async (_req, res: Response) => {
+    try {
+        const settings = await prisma.globalSetting.findMany({
+            where: {
+                key: { in: ['platformName', 'maintenanceMode', 'allowRegistrations', 'contactEmail', 'contactPhone'] }
+            }
+        });
+        const configMap: Record<string, string> = {};
+        settings.forEach(s => {
+            configMap[s.key] = s.value;
+        });
+        res.json({ settings: configMap });
+    } catch (err) {
+        res.status(500).json({ error: 'Erreur lors de la récupération de la configuration publique' });
+    }
+});
+
 // Get global config (Admin)
 router.get('/config', authenticate, authorize('ADMIN'), async (_req: AuthRequest, res: Response) => {
     try {
