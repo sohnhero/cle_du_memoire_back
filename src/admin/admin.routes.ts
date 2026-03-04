@@ -220,4 +220,55 @@ router.get('/tracking', authenticate, authorize('ADMIN'), async (req: AuthReques
     }
 });
 
+// Get global config (Admin)
+router.get('/config', authenticate, authorize('ADMIN'), async (_req: AuthRequest, res: Response) => {
+    try {
+        const settings = await prisma.globalSetting.findMany();
+
+        // Initial seed if empty
+        if (settings.length === 0) {
+            const initial = [
+                { key: 'platformName', value: 'Clé du Mémoire', description: 'Nom de la plateforme' },
+                { key: 'contactEmail', value: 'contact@cledumemoire.sn', description: 'Email de contact principal' },
+                { key: 'contactPhone', value: '+221 77 000 00 00', description: 'Téléphone de contact' },
+                { key: 'contactAddress', value: 'Dakar, Sénégal — Almadies', description: 'Adresse physique' },
+                { key: 'maintenanceMode', value: 'false', description: 'Désactive l\'accès aux étudiants' },
+                { key: 'allowRegistrations', value: 'true', description: 'Autoriser les nouvelles inscriptions' },
+                { key: 'requireApproval', value: 'false', description: 'Approbation manuelle des nouveaux comptes' },
+            ];
+
+            await prisma.globalSetting.createMany({ data: initial });
+            const newSettings = await prisma.globalSetting.findMany();
+            return res.json({ settings: newSettings });
+        }
+
+        res.json({ settings });
+    } catch (err) {
+        res.status(500).json({ error: 'Erreur lors de la récupération de la configuration' });
+    }
+});
+
+// Update global config bulk (Admin)
+router.patch('/config', authenticate, authorize('ADMIN'), async (req: AuthRequest, res: Response) => {
+    try {
+        const { settings } = req.body; // Array of { key, value }
+
+        if (!Array.isArray(settings)) {
+            return res.status(400).json({ error: 'Format invalide' });
+        }
+
+        for (const item of settings) {
+            await prisma.globalSetting.update({
+                where: { key: item.key },
+                data: { value: String(item.value) }
+            });
+        }
+
+        const updated = await prisma.globalSetting.findMany();
+        res.json({ settings: updated });
+    } catch (err) {
+        res.status(500).json({ error: 'Erreur lors de la mise à jour de la configuration' });
+    }
+});
+
 export default router;
