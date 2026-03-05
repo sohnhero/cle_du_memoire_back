@@ -1,3 +1,4 @@
+/// <reference types="node" />
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
@@ -9,7 +10,7 @@ async function main() {
     // Create Admin
     const adminPassword = await bcrypt.hash('admin123', 12);
     const admin = await prisma.user.upsert({
-        where: { email: 'admin@cledu memoire.sn' },
+        where: { email: 'admin@cledumemoire.sn' },
         update: {},
         create: {
             email: 'admin@cledumemoire.sn',
@@ -92,15 +93,17 @@ async function main() {
             update: {},
             create: {
                 id: 'pack-demarrage',
-                name: 'Pack Démarrage',
-                description: 'Idéal pour bien démarrer votre mémoire. Inclut le choix du sujet, la problématique et le plan détaillé.',
+                name: 'Pack 50 000 CFA',
+                description: 'Pour bien démarrer votre mémoire. Paiement unique à l\'inscription.',
                 price: 50000,
+                installment1: null,
+                installment2: null,
                 features: JSON.stringify([
-                    'Aide au choix du sujet',
-                    'Formulation de la problématique',
-                    'Élaboration du plan détaillé',
-                    'Recherche bibliographique guidée',
-                    '2 séances de coaching',
+                    'Choix du sujet : Un sujet pertinent et adapté à vos objectifs académiques.',
+                    'Problématique : Une problématique claire et précise pour orienter vos recherches.',
+                    'Plan détaillé : Une structure logique et cohérente pour votre mémoire.',
+                    'Contexte : Une introduction bien définie pour poser les bases de votre mémoire.',
+                    'Objectifs : Un accompagnement pour identifier et formuler vos objectifs.',
                 ]),
                 sortOrder: 1,
             },
@@ -110,18 +113,15 @@ async function main() {
             update: {},
             create: {
                 id: 'pack-redaction',
-                name: 'Pack Rédaction',
-                description: 'Accompagnement complet de la rédaction. Paiement en 2 tranches : 75 000 FCFA + 25 000 FCFA.',
+                name: 'Pack 100 000 CFA',
+                description: 'Pour une rédaction de qualité. Paiement en 2 tranches : 75 000 CFA à l\'inscription + 25 000 CFA à la fin.',
                 price: 100000,
                 installment1: 75000,
                 installment2: 25000,
                 features: JSON.stringify([
-                    'Accompagnement rédactionnel complet',
-                    'Relecture de chaque chapitre',
-                    'Corrections et suggestions',
-                    'Mise en forme académique',
-                    '6 séances de coaching',
-                    'Support WhatsApp illimité',
+                    'Suivi de la rédaction : Accompagnement tout au long de votre rédaction.',
+                    'Lecture approfondie : Vérification de la cohérence et de la clarté.',
+                    'Correction complète : Identification et correction des fautes d’orthographe et de grammaire.',
                 ]),
                 sortOrder: 2,
             },
@@ -131,15 +131,14 @@ async function main() {
             update: {},
             create: {
                 id: 'pack-soutenance',
-                name: 'Pack Soutenance',
-                description: 'Préparation intensive à la soutenance. Entraînement, slides et simulation.',
+                name: 'Pack 65 000 CFA',
+                description: 'Pour une soutenance professionnelle et réussie. Paiement unique à l\'inscription.',
                 price: 65000,
+                installment1: null,
+                installment2: null,
                 features: JSON.stringify([
-                    'Préparation des slides de présentation',
-                    'Simulation de soutenance',
-                    'Coaching prise de parole',
-                    'Anticipation des questions du jury',
-                    '3 séances de simulation',
+                    'PowerPoint professionnel : Création d’une présentation esthétique et structurée.',
+                    'Simulations régulières : 5 séances de simulation pour vous préparer à répondre aux questions du jury.',
                 ]),
                 sortOrder: 3,
             },
@@ -149,19 +148,17 @@ async function main() {
             update: {},
             create: {
                 id: 'pack-complet',
-                name: 'Pack Complet',
-                description: 'L\'accompagnement ultime du début à la fin. Paiement en 2 tranches : 100 000 FCFA + 50 000 FCFA.',
+                name: 'Pack Complet : 150 000 CFA',
+                description: 'Pour un accompagnement de A à Z. Paiement en 2 tranches : 100 000 CFA à l\'inscription + 50 000 CFA à la fin.',
                 price: 150000,
                 installment1: 100000,
                 installment2: 50000,
                 features: JSON.stringify([
-                    'Tout le Pack Démarrage',
-                    'Tout le Pack Rédaction',
-                    'Tout le Pack Soutenance',
-                    'Accompagnateur dédié',
-                    'Coaching illimité',
-                    'Priorité de traitement',
-                    'Garantie satisfaction',
+                    'Tous les services des packs précédents.',
+                    'Choix du sujet et formulation de la problématique.',
+                    'Plan détaillé et définition du contexte.',
+                    'Suivi de la rédaction, lecture et corrections complètes.',
+                    'PowerPoint professionnel et 5 séances de simulation.',
                 ]),
                 sortOrder: 4,
             },
