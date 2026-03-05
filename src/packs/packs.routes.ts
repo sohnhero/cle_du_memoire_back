@@ -226,4 +226,53 @@ router.post('/pay', authenticate, authorize('STUDENT'), async (req: AuthRequest,
     }
 });
 
+// Admin: Update pack
+router.patch('/:id', authenticate, authorize('ADMIN'), async (req: AuthRequest, res: Response) => {
+    try {
+        const { id } = req.params;
+        const { name, description, price, installment1, installment2, features, isActive } = req.body;
+
+        const existing = await prisma.pack.findUnique({ where: { id } });
+        if (!existing) return res.status(404).json({ error: 'Pack introuvable' });
+
+        const pack = await prisma.pack.update({
+            where: { id },
+            data: {
+                ...(name !== undefined && { name }),
+                ...(description !== undefined && { description }),
+                ...(price !== undefined && { price: Number(price) }),
+                ...(installment1 !== undefined && { installment1: installment1 || null }),
+                ...(installment2 !== undefined && { installment2: installment2 || null }),
+                ...(features !== undefined && { features: JSON.stringify(features) }),
+                ...(isActive !== undefined && { isActive }),
+            },
+        });
+        res.json({ pack });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Erreur lors de la mise à jour du pack' });
+    }
+});
+
+// Admin: Delete pack
+router.delete('/:id', authenticate, authorize('ADMIN'), async (req: AuthRequest, res: Response) => {
+    try {
+        const { id } = req.params;
+
+        // Prevent deletion if there are active subscriptions
+        const activeSubs = await prisma.subscription.count({
+            where: { packId: id, status: { in: ['ACTIVE', 'PAID', 'PENDING', 'PARTIAL'] } }
+        });
+        if (activeSubs > 0) {
+            return res.status(400).json({ error: `Impossible de supprimer : ${activeSubs} abonnement(s) actif(s) associé(s)` });
+        }
+
+        await prisma.pack.delete({ where: { id } });
+        res.json({ message: 'Pack supprimé avec succès' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Erreur lors de la suppression du pack' });
+    }
+});
+
 export default router;

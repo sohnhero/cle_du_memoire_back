@@ -10,11 +10,14 @@ router.get('/', authenticate, authorize('ADMIN'), async (req: AuthRequest, res: 
         const page = parseInt(req.query.page as string) || 1;
         const limit = parseInt(req.query.limit as string) || 20;
         const skip = (page - 1) * limit;
-        const { role, search } = req.query;
+        const { role, search, isActive } = req.query;
 
         const where: any = {};
         if (role && role !== 'ALL') {
             where.role = role;
+        }
+        if (isActive !== undefined) {
+            where.isActive = isActive === 'true';
         }
         if (search) {
             where.OR = [
