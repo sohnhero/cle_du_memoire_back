@@ -135,6 +135,48 @@ router.get('/me', authenticate, async (req: AuthRequest, res: Response) => {
     }
 });
 
+// Get single user by ID (Admin only)
+router.get('/:id', authenticate, authorize('ADMIN'), async (req: AuthRequest, res: Response) => {
+    try {
+        const { id } = req.params;
+        const user = await prisma.user.findUnique({
+            where: { id },
+            select: {
+                id: true, email: true, firstName: true, lastName: true,
+                phone: true, role: true, university: true, field: true,
+                studyLevel: true, targetDefenseDate: true,
+                avatar: true, isActive: true, createdAt: true, updatedAt: true,
+                memoiresAsStudent: {
+                    select: {
+                        id: true, title: true, phase: true, progressPercent: true, notes: true, createdAt: true,
+                        accompagnateur: { select: { id: true, firstName: true, lastName: true, email: true } },
+                        documents: {
+                            select: { id: true, filename: true, status: true, category: true, createdAt: true },
+                            orderBy: { createdAt: 'desc' },
+                            take: 10,
+                        },
+                    },
+                    orderBy: { createdAt: 'desc' },
+                    take: 1,
+                },
+                subscriptions: {
+                    select: {
+                        id: true, status: true, amountPaid: true, activatedAt: true, createdAt: true,
+                        pack: { select: { id: true, name: true, price: true, description: true } },
+                        payments: { select: { id: true, amount: true, status: true, method: true, createdAt: true }, orderBy: { createdAt: 'desc' } },
+                    },
+                    orderBy: { createdAt: 'desc' },
+                    take: 1,
+                },
+            },
+        });
+        if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
+        res.json({ user });
+    } catch {
+        res.status(500).json({ error: 'Erreur serveur' });
+    }
+});
+
 // Update user (Admin)
 router.patch('/:id', authenticate, authorize('ADMIN'), async (req, res: Response) => {
     try {
