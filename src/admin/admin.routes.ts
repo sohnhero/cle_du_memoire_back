@@ -153,21 +153,18 @@ router.get('/tracking', authenticate, authorize('ADMIN'), async (req: AuthReques
             ];
         }
 
-        // Stats by phase (global, no filter)
-        const phaseCounts = await prisma.memoireProgress.groupBy({
-            by: ['phase'],
-            _count: { id: true },
-        });
-
-        const avgProgress = await prisma.memoireProgress.aggregate({
-            _avg: { progressPercent: true },
-        });
-
-        const totalMemoires = await prisma.memoireProgress.count();
-        const withCoach = await prisma.memoireProgress.count({ where: { accompagnateurId: { not: null } } });
-        const completed = await prisma.memoireProgress.count({ where: { phase: 'FINAL' } });
-
-        const [memoires, total] = await Promise.all([
+        // Run all queries in parallel to free up connections faster
+        const [phaseCounts, avgProgress, totalMemoires, withCoach, completed, memoires, total, coaches] = await Promise.all([
+            prisma.memoireProgress.groupBy({
+                by: ['phase'],
+                _count: { id: true },
+            }),
+            prisma.memoireProgress.aggregate({
+                _avg: { progressPercent: true },
+            }),
+            prisma.memoireProgress.count(),
+            prisma.memoireProgress.count({ where: { accompagnateurId: { not: null } } }),
+            prisma.memoireProgress.count({ where: { phase: 'FINAL' } }),
             prisma.memoireProgress.findMany({
                 where,
                 include: {
@@ -189,15 +186,13 @@ router.get('/tracking', authenticate, authorize('ADMIN'), async (req: AuthReques
                 skip,
                 take: limit,
             }),
-            prisma.memoireProgress.count({ where })
+            prisma.memoireProgress.count({ where }),
+            prisma.user.findMany({
+                where: { role: 'ACCOMPAGNATEUR' },
+                select: { id: true, firstName: true, lastName: true },
+                orderBy: { firstName: 'asc' }
+            })
         ]);
-
-        // Get all coaches for filter dropdown
-        const coaches = await prisma.user.findMany({
-            where: { role: 'ACCOMPAGNATEUR' },
-            select: { id: true, firstName: true, lastName: true },
-            orderBy: { firstName: 'asc' }
-        });
 
         res.json({
             memoires,
@@ -225,7 +220,14 @@ router.get('/config/public', async (_req, res: Response) => {
     try {
         const settings = await prisma.globalSetting.findMany({
             where: {
-                key: { in: ['platformName', 'maintenanceMode', 'allowRegistrations', 'contactEmail', 'contactPhone'] }
+                key: {
+                    in: [
+                        'platformName', 'maintenanceMode', 'allowRegistrations',
+                        'contactEmail', 'contactPhone', 'contactAddress',
+                        'facebookUrl', 'instagramUrl', 'linkedinUrl',
+                        'twitterUrl', 'tiktokUrl', 'youtubeUrl'
+                    ]
+                }
             }
         });
         const configMap: Record<string, string> = {};
@@ -238,28 +240,38 @@ router.get('/config/public', async (_req, res: Response) => {
     }
 });
 
-// Get global config (Admin)
+// Get global config (Admin) - Robust check for all keys
 router.get('/config', authenticate, authorize('ADMIN'), async (_req: AuthRequest, res: Response) => {
     try {
-        const settings = await prisma.globalSetting.findMany();
+        const existingSettings = await prisma.globalSetting.findMany();
 
-        // Initial seed if empty
-        if (settings.length === 0) {
-            const initial = [
-                { key: 'platformName', value: 'Clé du Mémoire', description: 'Nom de la plateforme' },
-                { key: 'contactEmail', value: 'contact@cledumemoire.sn', description: 'Email de contact principal' },
-                { key: 'contactPhone', value: '+221 77 000 00 00', description: 'Téléphone de contact' },
-                { key: 'contactAddress', value: 'Dakar, Sénégal — Almadies', description: 'Adresse physique' },
-                { key: 'maintenanceMode', value: 'false', description: 'Désactive l\'accès aux étudiants' },
-                { key: 'allowRegistrations', value: 'true', description: 'Autoriser les nouvelles inscriptions' },
-                { key: 'requireApproval', value: 'false', description: 'Approbation manuelle des nouveaux comptes' },
-            ];
+        const requiredKeys = [
+            { key: 'platformName', value: 'Clé du Mémoire', description: 'Nom de la plateforme' },
+            { key: 'contactEmail', value: 'contact@cledumemoire.sn', description: 'Email de contact principal' },
+            { key: 'contactPhone', value: '+221 77 470 74 13', description: 'Téléphone de contact' },
+            { key: 'contactAddress', value: 'Dakar, Sénégal — Almadies', description: 'Adresse physique' },
+            { key: 'maintenanceMode', value: 'false', description: 'Désactive l\'accès aux étudiants' },
+            { key: 'allowRegistrations', value: 'true', description: 'Autoriser les nouvelles inscriptions' },
+            { key: 'requireApproval', value: 'false', description: 'Approbation manuelle des nouveaux comptes' },
+            { key: 'facebookUrl', value: 'https://facebook.com/cledumemoire', description: 'Lien Facebook' },
+            { key: 'instagramUrl', value: 'https://instagram.com/cledumemoire', description: 'Lien Instagram' },
+            { key: 'linkedinUrl', value: 'https://linkedin.com/company/cledumemoire', description: 'Lien LinkedIn' },
+            { key: 'twitterUrl', value: 'https://twitter.com/cledumemoire', description: 'Lien Twitter (X)' },
+            { key: 'tiktokUrl', value: 'https://tiktok.com/@cledumemoire', description: 'Lien TikTok' },
+            { key: 'youtubeUrl', value: 'https://youtube.com/@cledumemoire', description: 'Lien YouTube' },
+        ];
 
-            await prisma.globalSetting.createMany({ data: initial });
-            const newSettings = await prisma.globalSetting.findMany();
-            return res.json({ settings: newSettings });
+        let needsUpdate = false;
+        const existingKeys = new Set(existingSettings.map(s => s.key));
+
+        for (const req of requiredKeys) {
+            if (!existingKeys.has(req.key)) {
+                await prisma.globalSetting.create({ data: req });
+                needsUpdate = true;
+            }
         }
 
+        const settings = needsUpdate ? await prisma.globalSetting.findMany() : existingSettings;
         res.json({ settings });
     } catch (err) {
         res.status(500).json({ error: 'Erreur lors de la récupération de la configuration' });

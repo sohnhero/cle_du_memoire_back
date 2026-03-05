@@ -209,6 +209,28 @@ async function main() {
         },
     });
 
+    // Create Global Settings
+    const initialSettings = [
+        { key: 'platformName', value: 'Clé du Mémoire', description: 'Nom de la plateforme' },
+        { key: 'contactEmail', value: 'cledumemoire.sn@gmail.com', description: 'Email de contact principal' },
+        { key: 'contactPhone', value: '+221 77 470 7413', description: 'Téléphone de contact' },
+        { key: 'contactAddress', value: 'Dakar, Sénégal — Almadies', description: 'Adresse physique' },
+        { key: 'maintenanceMode', value: 'false', description: 'Désactive l\'accès aux étudiants' },
+        { key: 'allowRegistrations', value: 'true', description: 'Autoriser les nouvelles inscriptions' },
+        { key: 'requireApproval', value: 'false', description: 'Approbation manuelle des nouveaux comptes' },
+        { key: 'facebookUrl', value: 'https://facebook.com/cledumemoire', description: 'Lien Facebook' },
+        { key: 'instagramUrl', value: 'https://instagram.com/cledumemoire', description: 'Lien Instagram' },
+        { key: 'linkedinUrl', value: 'https://linkedin.com/company/cledumemoire', description: 'Lien LinkedIn' },
+    ];
+
+    for (const setting of initialSettings) {
+        await prisma.globalSetting.upsert({
+            where: { key: setting.key },
+            update: {},
+            create: setting,
+        });
+    }
+
     console.log('✅ Database seeded successfully!');
     console.log(`  - Admin: admin@cledumemoire.sn / admin123`);
     console.log(`  - Coach: coach1@cledumemoire.sn / coach123`);
