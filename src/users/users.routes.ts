@@ -35,7 +35,7 @@ router.get('/', authenticate, authorize('ADMIN'), async (req: AuthRequest, res: 
                 select: {
                     id: true, email: true, firstName: true, lastName: true,
                     phone: true, role: true, university: true, field: true,
-                    studyLevel: true, targetDefenseDate: true,
+                    studyLevel: true, targetDefenseDate: true, avatar: true,
                     isActive: true, createdAt: true, updatedAt: true,
                     memoiresAsStudent: {
                         select: {
