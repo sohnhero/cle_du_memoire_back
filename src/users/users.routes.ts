@@ -198,6 +198,54 @@ router.patch('/:id', authenticate, authorize('ADMIN'), async (req, res: Response
     }
 });
 
+// Delete user (Admin only)
+router.delete('/:id', authenticate, authorize('ADMIN'), async (req: AuthRequest, res: Response) => {
+    try {
+        const { id } = req.params;
+
+        // Ensure user is not deleting themselves
+        if (req.user!.id === id) {
+            return res.status(400).json({ error: 'Vous ne pouvez pas supprimer votre propre compte' });
+        }
+
+        const user = await prisma.user.findUnique({ where: { id } });
+        if (!user) {
+            return res.status(404).json({ error: 'Utilisateur introuvable' });
+        }
+
+        // The related records like ActivityLog, Document (if uploader), Events, Messages, 
+        // Notifications, subscriptions, etc that have onDelete: Cascade will be deleted automatically.
+        // Some relations like MemoireProgress (accompagnateurId) might not have cascade delete 
+        // and could cause issues if we don't handle them. But let's rely on Prisma's cascade 
+        // delete for the ones configured. For MemoireProgress studentId is cascade.
+
+        // Actually from schema: 
+        // MemoireProgress: student is Cascade. coach is nullified? No, it's not Cascade, so might throw if coach is assigned.
+        // Let's clear the coach from memoires if the user being deleted is a coach.
+        if (user.role === 'ACCOMPAGNATEUR') {
+            await prisma.memoireProgress.updateMany({
+                where: { accompagnateurId: id },
+                data: { accompagnateurId: null }
+            });
+        }
+
+        // Similarly for events where studentId is the user
+        await prisma.event.deleteMany({
+            where: { studentId: id }
+        });
+
+        // Finally delete the user
+        await prisma.user.delete({
+            where: { id }
+        });
+
+        res.json({ message: 'Utilisateur supprimé avec succès' });
+    } catch (error) {
+        console.error('Error deleting user:', error);
+        res.status(500).json({ error: 'Erreur lors de la suppression de l\'utilisateur' });
+    }
+});
+
 // Assign an accompanateur to a student
 router.post('/:id/assign-coach', authenticate, authorize('ADMIN'), async (req: AuthRequest, res: Response) => {
     try {
