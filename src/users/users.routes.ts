@@ -72,9 +72,16 @@ router.post('/', authenticate, authorize('ADMIN'), async (req: AuthRequest, res:
             return res.status(400).json({ error: 'Champs obligatoires manquants' });
         }
 
-        const existingUser = await prisma.user.findUnique({ where: { email } });
-        if (existingUser) {
+        const existingUserByEmail = await prisma.user.findUnique({ where: { email } });
+        if (existingUserByEmail) {
             return res.status(409).json({ error: 'Cet email est déjà utilisé' });
+        }
+
+        if (phone) {
+            const existingUserByPhone = await prisma.user.findFirst({ where: { phone } });
+            if (existingUserByPhone) {
+                return res.status(409).json({ error: 'Ce numéro de téléphone est déjà utilisé' });
+            }
         }
 
         const importBcrypt = await import('bcryptjs');
@@ -178,13 +185,28 @@ router.get('/:id', authenticate, authorize('ADMIN'), async (req: AuthRequest, re
 });
 
 // Update user (Admin)
-router.patch('/:id', authenticate, authorize('ADMIN'), async (req, res: Response) => {
+router.patch('/:id', authenticate, authorize('ADMIN'), async (req: AuthRequest, res: Response) => {
     try {
         const { id } = req.params;
-        const { firstName, lastName, phone, role, university, field, studyLevel, targetDefenseDate, isActive } = req.body;
+        const { email, firstName, lastName, phone, role, university, field, studyLevel, targetDefenseDate, isActive } = req.body;
+
+        // Check for duplicates if email or phone is being updated
+        if (email) {
+            const existing = await prisma.user.findFirst({
+                where: { email, NOT: { id } }
+            });
+            if (existing) return res.status(409).json({ error: 'Cet email est déjà utilisé' });
+        }
+        if (phone) {
+            const existing = await prisma.user.findFirst({
+                where: { phone, NOT: { id } }
+            });
+            if (existing) return res.status(409).json({ error: 'Ce numéro de téléphone est déjà utilisé' });
+        }
+
         const user = await prisma.user.update({
             where: { id },
-            data: { firstName, lastName, phone, role, university, field, studyLevel, targetDefenseDate: targetDefenseDate ? new Date(targetDefenseDate) : null, isActive },
+            data: { email, firstName, lastName, phone, role, university, field, studyLevel, targetDefenseDate: targetDefenseDate ? new Date(targetDefenseDate) : null, isActive },
             select: {
                 id: true, email: true, firstName: true, lastName: true,
                 phone: true, role: true, university: true, field: true,
@@ -193,7 +215,8 @@ router.patch('/:id', authenticate, authorize('ADMIN'), async (req, res: Response
             },
         });
         res.json({ user });
-    } catch {
+    } catch (error) {
+        console.error(error);
         res.status(500).json({ error: 'Erreur lors de la mise à jour' });
     }
 });
