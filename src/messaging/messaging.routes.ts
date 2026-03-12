@@ -74,6 +74,7 @@ router.get('/partners', authenticate, async (req: AuthRequest, res: Response) =>
 router.get('/conversations', authenticate, async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user!.id;
+        const userRole = req.user!.role;
         const conversations = await prisma.conversation.findMany({
             where: {
                 OR: [{ participant1Id: userId }, { participant2Id: userId }],
@@ -86,17 +87,48 @@ router.get('/conversations', authenticate, async (req: AuthRequest, res: Respons
             orderBy: { lastMessageAt: 'desc' },
         });
 
-        // Count unread messages per conversation
-        const convWithUnread = await Promise.all(
+        // Get current coach assignments for the user
+        let currentCoachId: string | null = null;
+        let assignedStudentIds: string[] = [];
+
+        if (userRole === 'STUDENT') {
+            const memoire = await prisma.memoireProgress.findFirst({
+                where: { studentId: userId },
+                orderBy: { createdAt: 'desc' },
+                select: { accompagnateurId: true },
+            });
+            currentCoachId = memoire?.accompagnateurId || null;
+        } else if (userRole === 'ACCOMPAGNATEUR') {
+            const memoires = await prisma.memoireProgress.findMany({
+                where: { accompagnateurId: userId },
+                select: { studentId: true },
+            });
+            assignedStudentIds = memoires.map(m => m.studentId);
+        }
+
+        // Count unread messages per conversation + add isActiveCoach flag
+        const convWithMeta = await Promise.all(
             conversations.map(async (conv) => {
                 const unreadCount = await prisma.message.count({
                     where: { conversationId: conv.id, senderId: { not: userId }, isRead: false },
                 });
-                return { ...conv, unreadCount };
+
+                // Determine isActiveCoach
+                const otherId = conv.participant1Id === userId ? conv.participant2Id : conv.participant1Id;
+                const other = conv.participant1Id === userId ? conv.participant2 : conv.participant1;
+                let isActiveCoach = true; // default: messaging is allowed
+
+                if (userRole === 'STUDENT' && other.role === 'ACCOMPAGNATEUR') {
+                    isActiveCoach = currentCoachId === otherId;
+                } else if (userRole === 'ACCOMPAGNATEUR' && other.role === 'STUDENT') {
+                    isActiveCoach = assignedStudentIds.includes(otherId);
+                }
+
+                return { ...conv, unreadCount, isActiveCoach };
             })
         );
 
-        res.json({ conversations: convWithUnread });
+        res.json({ conversations: convWithMeta });
     } catch {
         res.status(500).json({ error: 'Erreur serveur' });
     }
@@ -158,6 +190,28 @@ router.post('/send', authenticate, upload.single('attachment'), async (req: Auth
         // Check messaging rules
         if (!canMessage(req.user!.role, receiver.role)) {
             return res.status(403).json({ error: 'Vous ne pouvez pas envoyer de message à cet utilisateur' });
+        }
+
+        // If student -> accompagnateur, ensure this is the currently assigned coach
+        if (req.user!.role === 'STUDENT' && receiver.role === 'ACCOMPAGNATEUR') {
+            const memoire = await prisma.memoireProgress.findFirst({
+                where: { studentId: senderId },
+                orderBy: { createdAt: 'desc' },
+                select: { accompagnateurId: true },
+            });
+            if (!memoire || memoire.accompagnateurId !== receiverId) {
+                return res.status(403).json({ error: 'Cet accompagnateur ne vous est plus assigné.' });
+            }
+        }
+
+        // If accompagnateur -> student, ensure this student is currently assigned to them
+        if (req.user!.role === 'ACCOMPAGNATEUR' && receiver.role === 'STUDENT') {
+            const memoire = await prisma.memoireProgress.findFirst({
+                where: { studentId: receiverId, accompagnateurId: senderId },
+            });
+            if (!memoire) {
+                return res.status(403).json({ error: 'Cet étudiant ne vous est plus assigné.' });
+            }
         }
 
         // Handle attachment upload
