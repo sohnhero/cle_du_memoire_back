@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import prisma from '../prisma/client';
+import { sendWelcomeEmail, sendNewUserNotificationToAdmin } from '../common/mailer';
 import { authenticate, AuthRequest } from '../common/guards/auth.guard';
 
 const router = Router();
@@ -87,6 +88,12 @@ router.post('/register', async (req, res: Response) => {
         await prisma.activityLog.create({
             data: { userId: user.id, action: 'REGISTER', details: `New ${validRole} registered` },
         });
+
+        // Trigger emails asynchronously without blocking the response
+        if (validRole === 'STUDENT') {
+            sendWelcomeEmail(user);
+            sendNewUserNotificationToAdmin(user);
+        }
 
         res.status(201).json({
             user: sanitizeUser(user),

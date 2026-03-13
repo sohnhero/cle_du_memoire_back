@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import prisma from '../prisma/client';
 import { authenticate, authorize, AuthRequest } from '../common/guards/auth.guard';
+import { sendPaymentReceivedEmail, sendPaymentNotificationToAdmin, sendPaymentValidatedEmail } from '../common/mailer';
 
 const router = Router();
 
@@ -89,6 +90,9 @@ router.patch('/:id/activate', authenticate, authorize('ADMIN'), async (req, res:
             data: { status: 'ACTIVE', activatedAt: new Date() },
             include: { pack: true, user: { select: { id: true, email: true, firstName: true, lastName: true } } },
         });
+
+        sendPaymentValidatedEmail(subscription.user, subscription.pack.price, subscription.pack.name, 'ACTIVE');
+
         res.json({ subscription });
     } catch {
         res.status(500).json({ error: 'Erreur lors de l\'activation' });
@@ -154,6 +158,10 @@ router.patch('/subscriptions/:id/payment', authenticate, authorize('ADMIN'), asy
             include: { pack: true, user: { select: { id: true, email: true, firstName: true, lastName: true } } }
         });
 
+        if (newStatus === 'ACTIVE' || newStatus === 'PARTIAL') {
+            sendPaymentValidatedEmail(updatedSub.user, Number(amount), updatedSub.pack.name, newStatus);
+        }
+
         res.json({ subscription: updatedSub });
     } catch (error) {
         console.error(error);
@@ -190,7 +198,7 @@ router.post('/pay', authenticate, authorize('STUDENT'), async (req: AuthRequest,
                 userId: req.user!.id,
                 status: { in: ['PENDING', 'PARTIAL', 'DEACTIVATED'] }
             },
-            include: { pack: true }
+            include: { pack: true, user: true }
         });
 
         if (!subscription) {
@@ -218,6 +226,9 @@ router.post('/pay', authenticate, authorize('STUDENT'), async (req: AuthRequest,
                 data: { status: 'PARTIAL', amountPaid: Number(amount) }
             });
         }
+
+        sendPaymentReceivedEmail(subscription.user, Number(amount), method, reference);
+        sendPaymentNotificationToAdmin(subscription.user, Number(amount), method, reference, subscription.pack.name);
 
         res.json({ message: 'Notification de paiement envoyée. Un administrateur validera sous peu.' });
     } catch (error) {

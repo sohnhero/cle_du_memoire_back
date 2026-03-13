@@ -19,7 +19,18 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
     const token = authHeader.split(' ')[1];
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret') as any;
-        req.user = { id: decoded.id, email: decoded.email, role: decoded.role };
+
+        // Verify user still exists in DB
+        const userExists = await prisma.user.findUnique({
+            where: { id: decoded.id },
+            select: { id: true, role: true }
+        });
+
+        if (!userExists) {
+            return res.status(401).json({ error: 'Utilisateur introuvable. Veuillez vous reconnecter.' });
+        }
+
+        req.user = { id: decoded.id, email: decoded.email, role: userExists.role };
 
         // Maintenance Mode Check
         if (req.user.role !== 'ADMIN') {
