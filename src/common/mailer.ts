@@ -179,3 +179,25 @@ export const sendPaymentValidatedEmail = async (user: any, amount: number, packN
     console.error('Failed to send payment validated email:', error);
   }
 };
+
+export const sendResetPasswordEmail = async (user: any, resetLink: string) => {
+  const content = `
+    <p>Bonjour <strong>${user.firstName || 'Étudiant'}</strong>,</p>
+    <p>Vous avez demandé la réinitialisation de votre mot de passe sur <strong>Clé du Mémoire</strong>.</p>
+    <p>Pour définir un nouveau mot de passe, veuillez cliquer sur le bouton ci-dessous (ce lien est valable pendant 1 heure) :</p>
+    <center><a href="${resetLink}" class="button">Réinitialiser mon mot de passe</a></center>
+    <p>Si vous n'avez pas demandé cette réinitialisation, vous pouvez ignorer cet e-mail. Votre mot de passe restera inchangé.</p>
+    <p>Cordialement,<br>L'équipe Clé du Mémoire</p>
+  `;
+
+  try {
+    await resend.emails.send({
+      from: `Sécurité <${FROM_EMAIL}>`,
+      to: user.email,
+      subject: 'Réinitialisation de votre mot de passe 🔒',
+      html: baseTemplate('Réinitialisation de mot de passe', content),
+    });
+  } catch (error) {
+    console.error('Failed to send reset password email:', error);
+  }
+};

@@ -23,6 +23,8 @@ model User {
   updatedAt         DateTime          @updatedAt
   studyLevel        String?
   targetDefenseDate DateTime?
+  resetToken        String?           @unique
+  resetTokenExpires DateTime?
   activityLogs      ActivityLog[]
   conversations1    Conversation[]    @relation("Participant1")
   conversations2    Conversation[]    @relation("Participant2")

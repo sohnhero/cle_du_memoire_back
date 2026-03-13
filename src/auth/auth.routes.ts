@@ -2,8 +2,9 @@ import { Router, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import prisma from '../prisma/client';
-import { sendWelcomeEmail, sendNewUserNotificationToAdmin } from '../common/mailer';
+import { sendWelcomeEmail, sendNewUserNotificationToAdmin, sendResetPasswordEmail } from '../common/mailer';
 import { authenticate, AuthRequest } from '../common/guards/auth.guard';
+import crypto from 'crypto';
 
 const router = Router();
 
@@ -108,7 +109,7 @@ router.post('/register', async (req, res: Response) => {
 // Login
 router.post('/login', async (req, res: Response) => {
     try {
-        const { email, password } = req.body;
+        const { email, password, rememberMe } = req.body;
 
         if (!email || !password) {
             return res.status(400).json({ error: 'Email et mot de passe requis' });
@@ -128,11 +129,11 @@ router.post('/login', async (req, res: Response) => {
             return res.status(401).json({ error: 'Identifiants incorrects' });
         }
 
-        const token = generateToken(user);
-        const refreshToken = generateRefreshToken(user);
+        const token = generateToken(user, rememberMe);
+        const refreshToken = generateRefreshToken(user, rememberMe);
 
         await prisma.activityLog.create({
-            data: { userId: user.id, action: 'LOGIN', details: 'User logged in', ip: req.ip },
+            data: { userId: user.id, action: 'LOGIN', details: `User logged in ${rememberMe ? '(Remember Me)' : ''}`, ip: req.ip },
         });
 
         res.json({
@@ -210,20 +211,86 @@ router.post('/change-password', authenticate, async (req: AuthRequest, res: Resp
     }
 });
 
+// Forgot Password
+router.post('/forgot-password', async (req, res: Response) => {
+    try {
+        const { email } = req.body;
+        if (!email) return res.status(400).json({ error: 'Email requis' });
+
+        const user = await prisma.user.findUnique({ where: { email } });
+        if (!user) {
+            // Security: don't reveal if user exists, but here we usually just return success
+            return res.json({ message: 'Si cet email correspond à un compte, un lien de réinitialisation vous a été envoyé.' });
+        }
+
+        const resetToken = crypto.randomBytes(32).toString('hex');
+        const resetTokenExpires = new Date(Date.now() + 3600000); // 1 hour
+
+        await prisma.user.update({
+            where: { id: user.id },
+            data: { resetToken, resetTokenExpires }
+        });
+
+        const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}`;
+        await sendResetPasswordEmail(user, resetLink);
+
+        res.json({ message: 'Si cet email correspond à un compte, un lien de réinitialisation vous a été envoyé.' });
+    } catch (error) {
+        console.error('Forgot password error:', error);
+        res.status(500).json({ error: 'Erreur serveur' });
+    }
+});
+
+// Reset Password
+router.post('/reset-password', async (req, res: Response) => {
+    try {
+        const { token, newPassword } = req.body;
+        if (!token || !newPassword) return res.status(400).json({ error: 'Token et nouveau mot de passe requis' });
+
+        const user = await prisma.user.findFirst({
+            where: {
+                resetToken: token,
+                resetTokenExpires: { gt: new Date() }
+            }
+        });
+
+        if (!user) {
+            return res.status(400).json({ error: 'Token invalide ou expiré' });
+        }
+
+        const hashedPassword = await bcrypt.hash(newPassword, 12);
+        await prisma.user.update({
+            where: { id: user.id },
+            data: {
+                password: hashedPassword,
+                resetToken: null,
+                resetTokenExpires: null
+            }
+        });
+
+        res.json({ message: 'Votre mot de passe a été réinitialisé avec succès.' });
+    } catch (error) {
+        console.error('Reset password error:', error);
+        res.status(500).json({ error: 'Erreur serveur' });
+    }
+});
+
 // Helpers
-function generateToken(user: any) {
+function generateToken(user: any, rememberMe = false) {
+    const expiresIn = rememberMe ? '30d' : (process.env.JWT_EXPIRES_IN || '1h');
     return jwt.sign(
         { id: user.id, email: user.email, role: user.role },
         process.env.JWT_SECRET || 'secret',
-        { expiresIn: (process.env.JWT_EXPIRES_IN || '15m') as any }
+        { expiresIn: expiresIn as any }
     );
 }
 
-function generateRefreshToken(user: any) {
+function generateRefreshToken(user: any, rememberMe = false) {
+    const expiresIn = rememberMe ? '90d' : (process.env.JWT_REFRESH_EXPIRES_IN || '7d');
     return jwt.sign(
         { id: user.id },
         process.env.JWT_REFRESH_SECRET || 'refresh-secret',
-        { expiresIn: (process.env.JWT_REFRESH_EXPIRES_IN || '7d') as any }
+        { expiresIn: expiresIn as any }
     );
 }
 
