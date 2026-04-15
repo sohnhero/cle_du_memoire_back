@@ -190,23 +190,20 @@ router.patch('/:id', authenticate, authorize('ADMIN'), async (req: AuthRequest, 
         const { id } = req.params;
         const { email, firstName, lastName, phone, role, university, field, studyLevel, targetDefenseDate, isActive } = req.body;
 
-        // Check for duplicates if email or phone is being updated
-        if (email) {
-            const existing = await prisma.user.findFirst({
-                where: { email, NOT: { id } }
-            });
-            if (existing) return res.status(409).json({ error: 'Cet email est déjà utilisé' });
-        }
-        if (phone) {
-            const existing = await prisma.user.findFirst({
-                where: { phone, NOT: { id } }
-            });
-            if (existing) return res.status(409).json({ error: 'Ce numéro de téléphone est déjà utilisé' });
+        const updateData: any = { 
+            email, firstName, lastName, phone, role, university, field, studyLevel, 
+            targetDefenseDate: targetDefenseDate ? new Date(targetDefenseDate) : null, 
+            isActive 
+        };
+
+        if (req.body.password) {
+            const bcrypt = await import('bcryptjs');
+            updateData.password = await bcrypt.default.hash(req.body.password, 12);
         }
 
         const user = await prisma.user.update({
             where: { id },
-            data: { email, firstName, lastName, phone, role, university, field, studyLevel, targetDefenseDate: targetDefenseDate ? new Date(targetDefenseDate) : null, isActive },
+            data: updateData,
             select: {
                 id: true, email: true, firstName: true, lastName: true,
                 phone: true, role: true, university: true, field: true,
@@ -356,6 +353,42 @@ router.patch('/me/avatar', authenticate, async (req: AuthRequest, res: Response)
         res.json({ user });
     } catch {
         res.status(500).json({ error: "Erreur lors de la mise à jour de l'avatar" });
+    }
+});
+
+// Change email
+router.patch('/me/email', authenticate, async (req: AuthRequest, res: Response) => {
+    try {
+        const { currentPassword, newEmail } = req.body;
+        if (!currentPassword || !newEmail) {
+            return res.status(400).json({ error: 'Mot de passe actuel et nouvel email requis' });
+        }
+
+        const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
+        if (!user) return res.status(404).json({ error: 'Utilisateur non trouvé' });
+
+        const bcrypt = await import('bcryptjs');
+        const valid = await bcrypt.default.compare(currentPassword, user.password);
+        if (!valid) {
+            return res.status(401).json({ error: 'Mot de passe actuel incorrect' });
+        }
+
+        // Check if email already taken
+        const existing = await prisma.user.findUnique({ where: { email: newEmail } });
+        if (existing) {
+            return res.status(409).json({ error: 'Cet email est déjà utilisé par un autre compte' });
+        }
+
+        const updated = await prisma.user.update({
+            where: { id: user.id },
+            data: { email: newEmail },
+            select: { id: true, email: true }
+        });
+
+        res.json({ message: 'Email mis à jour avec succès', email: updated.email });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Erreur lors du changement d\'email' });
     }
 });
 
